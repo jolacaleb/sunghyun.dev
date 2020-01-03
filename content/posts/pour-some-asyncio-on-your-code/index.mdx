@@ -1,0 +1,183 @@
+---
+title: Pour some asyncio on your code!
+author: Sunghyun Lee
+date: 2019-05-23 02:01:30
+---
+
+import BlogImage from '../../components/BlogImage';
+
+<div style={{"textAlign": "center"}}>
+    <iframe 
+        width="560"
+        height="315"
+        src="https://www.youtube.com/embed/0UIB9Y4OFPs" 
+        frameborder="0" 
+        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" 
+        allowfullscreen>
+    </iframe><br />
+    <span style={{"color": "gray"}}><code>def</code> leppard -> <code>async def</code> leppard</span>
+</div>
+
+이번 포스팅에서는 synchronous한 라이브러리를 asynchronous하게 코드를 수정하고 배포한 일련의 경험에 대하여 이야기해보고자 한다.
+우리 모두가 잘 알고 있다시피, 파이썬은 async/await 구문을 이용하여 코루틴을 구현할 수 있도록 지원하게 되었다. 
+굉장히 최근에 나온 기술이고, 파이썬 언어 자체가 굉장히 널리 사용되어지고 있는 언어 중 하나이기 때문에 많은 어플리케이션이 이를 이용하여 CPU에 채찍질을 좀 더 효율적으로 가할 수 있도록 되었지만,
+신기술이기 때문에 이를 지원하는 라이브러리는 많이 없는 상태이다. 기존의 패키지들은 원래 있던 synchronous한 코드를 전부 asynchronous하게 고치는 데 드는 비용이 적지 않기 때문에 
+파이썬 유저들이 많이 사용하는 라이브러리 조차도 async/await을 지원하지 않는 라이브러리가 많다. 오픈소스계의 블루오션이라 할 수 있겠다.
+
+<BlogImage 
+    src="posts/pour-some-asyncio-on-your-code/support-for-asyncio.png" 
+    alt="People saying `support for asyncio`" 
+    size="full" 
+    caption="만들어 달라">
+</BlogImage>
+
+이전에 DynamoDB에 대한 포스팅을 남긴 적이 있다. 필자는 업무에서 현재 MSA를 운용하고 있는데, 파이썬 + sanic 프레임워크를 사용하여 코드를 작성하고 있다.
+이전에 작성했다시피, DynamoDB의 장점을 살릴 수 있는 서비스에서 DynamoDB의 사용을 촉진시키기 위해 DynamoDB를 좀 더 쉽게 사용할 수 있는 interface를 찾던 중 [PynamoDB](https://github.com/pynamodb/pynamodb)라는 라이브러리를 발견하였다.
+
+PynamoDB는 DynamoDB의 Pythonic interface를 표방하고 있고, 문서를 보면 알겠지만 복잡한 DynamoDB의 쿼리 및 요청을 굉장히 파이써닉 하게 만들어준다.
+이 PynamoDB를 비동기로 실행 가능하게 만든 InPynamoDB를 개발한 경험을 토대로 `나는 어떻게 했는지` 에 대한 기록을 남기고 싶어서 포스팅을 작성한다.
+
+```python
+# execute `scan` operation using botocore
+_args = {
+    'TableName': 'sample_table',
+    'Limit': 100,
+    'FilterExpression': 'level = 100'  # fetch users whose level is 100
+}
+
+response = client.scan(**_args)
+
+print(response)
+"""
+{
+    'Items': [
+        {
+            'id': {'S': 'item_id_0'},
+            'level': {'N': '0'},
+            'email_address': {'S': 'sample_id_0@gmail.com'},
+            'phone_number': {'S': '+821000000000'},
+        },
+        ...,
+        ...,
+        ...,
+    ],
+    'Count': 100,
+    'ScannedCount': 100,
+    'LastEvaluatedKey': {
+        'id': {'S': 'item_id_99'}
+    },
+    ...
+}
+"""
+
+exclusive_start_key = response['ExclusiveStartKey']
+while True:
+    _args['ExclusiveStartKey'] = exclusive_start_key
+
+    response = client.scan(**_args)
+
+    try:
+        exclusive_start_key = response['LastEvaluatedKey']
+    except KeyError:
+        break  # No `LastEvaluatedKey` key if finished
+```
+
+response가 저렇게 나오면 사용하기 어렵고 특히 attribute 안에 data type이 명시되어 있는 dict로 나오는 부분을 파이써닉하게 parsing하기 정말 어렵다. 
+게다가 예시로 든 코드의 data에는 다행히 Map attribute가 없지만 혹시 Map이 있다면 ... 게다가 nested map이라면... 
+위의 행위를 PynamoDB를 사용하면 아래와 같은 예쁜 코드가 완성된다.
+
+```python
+# execute `scan` operation using PynamoDB
+for item in SampleTableModel.scan(
+    filter_expression=SampleTableModel.level == 0, limit=100
+):
+    print(item)  # item is an instance of class 'SampleTableModel'
+    """
+    <SampleTableModel id= ...>
+
+    item.level, item.id, item.email_address 와 같이 property에 access할 수 있음
+    """
+```
+
+끝이다. 정말 끝이다. 주석 다 빼면 2줄이면 끝난다. *사실 `botocore`를 이용해도 주석 빼면 몇 줄 안되긴 한다.*
+DynamoDB의 러닝커브를 PynamoDB를 이용하여 쉽게 줄여줄 수 있을 것이라고 생각하였다. 물론 DynamoDB에 대해서 자세히 모르고 사용하면 안되겠지만, 
+저렇게 복잡한 request를 만들면서 낭비되는 시간만큼은 절약 가능할 것이라고 생각하였다.
+
+### 그러나!
+
+PynamoDB는 asynchronous하지 않다! 우리 개발팀은 sanic을 서버로 사용하고 있었기 때문에 네트워크 io가 필요한 작업을 코루틴으로 wrapping하지 않고 사용하는 것을 매우 경계해야 했다.
+그래서 필자는 PynamoDB를 asyncio를 이용하여 비동기로 실행될 수 있도록 기능들을 코루틴으로 wrapping하기로 결정했다.
+
+
+### 나는 어떻게 했나
+
+이 부분이 가장 핵심적인 부분인 것 같다. 처음에 어떻게 시작해야 할 지 고민을 많이 했고, 일단 PynamoDB의 코드를 찬찬히 뜯어본 결과, 
+아래와 같이 구성되어 있는 것을 파악했다. 화살표는 고수준의 추상화, 즉 유저가 직접 호출하는 부분에 제일 가까운 부분이고, 화살표가 진행될 수록 저수준이 됨을 나타낸다.
+
+<BlogImage src="posts/pour-some-asyncio-on-your-code/pynamodb-code-analysis.png" alt="pynamodb-code-analysis" size="full"></BlogImage>
+
+`_make_api_call()` 이라는 핵심적이고 낮은 레벨에서 요청을 날리는 메소드를 발견했다. 
+
+언제 `비동기화` 되어야 하는지 빠르게 recap해 본다면,
+- i/o bound 작업 같이 CPU가 아무 일 없이 기다리게 되는 작업
+- fire/forget 같은 결과가 필요없는 작업
+
+위의 작업과 같은 일을 하는 메소드가 있다면 먼저 해당 메소드를 코루틴으로 바꿔준다. (-> `async def`)
+
+<BlogImage src="posts/pour-some-asyncio-on-your-code/code-ex-1.png" alt="code example 1" size="full"></BlogImage>
+
+notepad나 vi로 코딩을 하지 않는 이상, IDE를 사용할텐데 PyCharm의 경우에는 코루틴을 일반 함수를 호출하듯이 호출하면 아래와 같이 경고한다.
+
+<BlogImage src="posts/pour-some-asyncio-on-your-code/code-ex-2.png" alt="code example 2" size="full"></BlogImage>
+
+그러면 해당 경고가 나타난 함수 호출 부분을 `await`를 사용하여 아래와 같이 바꿔준다.
+
+<BlogImage src="posts/pour-some-asyncio-on-your-code/code-ex-3.png" alt="code example 3" size="full"></BlogImage>
+
+중요한 것은 언제나 위와 같은 경고가 나오지는 않는다는 점이다. 필자가 직접 개발했을 때는 코루틴 일반 호출 부분에서는 항상 황토색으로 표시되며 경고가 나왔지만, 경고의 내용은 항상 달랐다.
+그러므로 특별한 색이 칠해지는 모든 구문을 주의깊게 보아야 한다. (당연한 이야기지만)
+
+일단 기본적으로 위와 같이 진행을 한다면 결국 중간 다리 역할을 하는 메소드들도 전부 코루틴화 (couroutin-ized) 되었을 것이다. InPynamoDB의 경우 코드 진행은 아래와 같이 진행되었다.
+
+<BlogImage src="posts/pour-some-asyncio-on-your-code/inpynamodb-process.png" alt="Diagram on processing InPynamoDB" size="full"></BlogImage>
+
+그림 한장 달랑 가지고는 이해가 잘 되지 않을 수 있는데, 함수 진행 방향과 달리 코드는 **역방향으로** 수정되게 된다. 즉, 가장 저수준인 쪽이 먼저 코루틴화되었고, 
+이를 호출하는 쪽, 즉 고수준으로 올라가면서 코루틴화 되는, Bottom-up approach의 형태로 코드 수정이 이루어졌다.
+
+### Unittest!
+먼저 PynamoDB는 유닛테스트가 `pytest`를 이용하여 작성되어 있었고, `unittest.mock`의 도움을 받아 몇 가지 객체를 mocking하고 있었다.
+일반적인 유닛테스트는 async화 된 새로운 async 버전에서 동작하지 않을 것이다. 코루틴 테스트 케이스를 돌리기 위해 유용한 라이브러리가 두 개 있는데
+
+[pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio)
+[asynctest](https://github.com/Martiusweb/asynctest)
+
+가 그것들이다.
+
+`pytest-asyncio` 의 경우에는 일반적인 pytest 환경에서 돌아가지 않을 코루틴화된 테스트 함수를 이벤트 루프에 자동으로 주입해주며[^1],
+`asynctest`의 경우에는 기존 `unittest.mock`에서 사용하던 `MagicMock`으로 mocking되지 않는 코루틴들을 새로운 Mock class인 `CoroutineMock`을 통해 mocking할 수 있도록 도와준다. 
+특히 주어진 객체가 코루틴이 아니면 원래 사용하던 `MagicMock`으로 mocking하며, 코루틴일 경우에만 `CoroutineMock`으로 mocking하므로, `unittest.Mock`을 완전히 대체해도 괜찮다.
+
+PynamoDB의 경우에는 두 가지 라이브러리의 도움을 받아 테스트 로직의 수정이 거의 없이 모든 테스트를 코루틴도 테스팅 가능한 테스트로 변환에 성공하였다.
+
+### Tip..s?
+
+팁이라고 할만한 정말 거창한 건 아니지만, `이랬으면 좋았을까?` 싶었던 부분들이 있다.
+
+1. 일단 함수 오버라이드는 최소한으로만 이루어져야 한다. 나머지는 상속으로 해결하는 편이 좋을 것 같다. 물론 코루틴을 호출하는 부분은 전부 코루틴화 하는 것이 맞지만, 그렇지 않은 메소드들은 왠만해서는 변경할 필요가 없을 것이다. 
+base로 삼고 있는 패키지가 업데이트 될 경우를 대비, 특히 breaking change가 생기면 어떤 부분을 수정해야 하는지 골치 아파질 것이다. 물론 처음 작업을 시작할 때는 전부 복사&붙여넣기 떠놓고 작업을 하는 것이 훨씬 편할 것이다. (필자도 그랬다.)
+하지만 나중에 기본 패키지가 업데이트 되었을 때 모든 메소드가 오버라이드되어 있으면 모든 메소드를 전부 다 수정해야 한다.
+2. 테스트 코드를 자신이 신뢰할 수 있는 수준까지 작성하고, 신뢰해야 한다. 특히 행하기 쉬운 실수가, 유닛테스트를 전부 async화 시켜놓고, `@pytest.mark.asyncio` 데코레이터를 붙이지 않은 채 테스트를 돌리는 것이다.
+pytest 최신 버전에서는 코루틴 테스트를 그냥 돌리려 했다고 오류가 나지만, 구버전의 경우에는 `function something has never awaited` (잘 기억이 나지 않는다. 아무튼 `has never awaited`는 무조건 나왔으니 해당 키워드만 알고 있도록 하자.)
+가 뜬채로 테스트가 **성공** 한다. 절대 성공한게 아니라 코루틴 테스트를 일반 함수 호출 (이렇게 하면 그냥 코루틴이 나온다.) 로 돌리고, `Exception`이 없이 코루틴을 받았으니 테스트 성공이라 뜨는 것이다. 
+테스트가 조금 빨리 끝나면 output을 다시 살펴보자.
+
+### Conclusion
+
+결론적으로 패키지를 async화로 래핑하고자 할 때, 아래와 같은 순서로 진행하는 것은 어떨지 생각해보았다.
+
+```
+비동기화가 필요한 부분을 찾아 코루틴으로 변환 -> IDE의 도움을 받아 영향이 있는 함수들을 코루틴으로 변환 
+-> 유닛테스트 작성 (유닛테스트의 신뢰도 확보) -> 실패한 부분 수정
+```
+
+[^1]: 즉, 코루틴을 실행시켜주며
