@@ -4,12 +4,39 @@ require(`dotenv`).config({
 
 module.exports = {
   siteMetadata: {
-    siteTitleAlt: `ppudol <web developer>`,
+    siteTitle: `ppudolph`,
+    siteTitleAlt: `devblog by ppudolph<sunghyun.lee>`,
+    siteHeadline: `blog @ppudolph`,
+    siteUrl: `https://sunghyun.dev`,
+    siteDescription: `Personal website for sunghyun.lee, web developer`,
+    siteLanguage: `kr`,
+    author: `@ppudolph`,
+    navigation: [
+      {
+        title: `Blog`,
+        slug: `/blog`,
+      },
+      {
+        title: `About`,
+        slug: `/about`,
+      },
+    ],
+    externalLinks: [
+      {
+        name: `instagram`,
+        url: `https://www.instagram.com/ppudolph`,
+      },
+      {
+        name: `github`,
+        url: `https://www.github.com/ppudolph`
+      }
+    ],
   },
   plugins: [
     {
       resolve: `@lekoarts/gatsby-theme-minimal-blog`,
       options: {
+        formatString: `YYYY.MM.DD`,
         navigation: [
           {
             title: `Blog`,
@@ -22,13 +49,13 @@ module.exports = {
         ],
         externalLinks: [
           {
-            name: `Twitter`,
-            url: `https://twitter.com/lekoarts_de`,
+            name: `instagram`,
+            url: `https://www.instagram.com/ppudolph/`,
           },
           {
-            name: `Instagram`,
-            url: `https://www.instagram.com/wsmango/`,
-          },
+            name: `github`,
+            url: `https://www.github.com/ppudolph`
+          }
         ],
       },
     },
