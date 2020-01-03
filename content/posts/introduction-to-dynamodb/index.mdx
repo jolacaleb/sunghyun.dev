@@ -1,0 +1,124 @@
+---
+title: Introduction to DynamoDB
+author: Sunghyun Lee
+date: 2019-03-18 23:00:00
+---
+
+import BlogImage from '../../components/BlogImage';
+
+
+AWS의 여러 서비스 중 DynamoDB라는 데이터베이스 서비스가 있다. 힙한 개발자들의 입장에서 보자면 상당히 매력적인 keyword로 무장하고 있음을 알 수 있다.
+
+<BlogImage 
+    src="posts/introduction-to-dynamodb/aws-description.png" 
+    alt="aws short description" 
+    size="full" 
+    caption="full managed, NoSQL, seamlessly scalable... 모두 매력적이다"
+></BlogImage>
+
+스타트업 입장에서 관리비를 줄여준다는 측면과 저장하는데 비용이 드는 것이 아닌 사용할 때 비용이 지불된다는 점, 그리고 AWS에 의해 자동으로 fully managed 된다는 점은 엄청난 매력 포인트이다.
+회사에서 DynamoDB를 굉장히 헤비하게 사용하고 있는 개발자로써 DynamoDB를 적용하는데 고려해봐야 할 것들을 정리해본다.
+
+### DynamoDB란 무엇인가?
+
+AWS에서 제공하는 **serverless**, **fully managed** database이다. 우리에게 익숙한 RDBMS들은 보통 instance가 있고, 그 위에 데이터베이스 서버를 올려서 사용하는 방식이다.
+AWS Aurora도 크게 다르지 않지만, instance에 대한 관리비 (human resource ...) 가 덜 든다는 것이 차이점이다. 
+하지만 DynamoDB의 경우에는 instance따위는 없는 serverless 데이터베이스로써 동작하며, replication이나 partitioning 전부 자동으로 관리되는 것이 큰 장점이다.
+사실 약간 신기할 정도로 튜닝에 대해서 전혀 신경쓸 필요가 없다.
+
+NoSQL의 데이터베이스 중 하나로, Key-value model에 가까운 형태이며, 그러므로 redis와 비슷하기 때문에 redis를 사용해본 사람이라면 DynamoDB 역시 어렵지 않게 다룰 수 있다.
+이로 인해 query optimization의 필요가 전혀 없다. 어차피 테이블 구조 자체가 매우 단순한 NoSQL-KeyValue store의 조합으로, hash key[^1]가 고르게 잘 분배될 수 있도록 디자인하는 것 정도의 optimization만 필요할 뿐이다.
+
+다만 그 단순함 덕분에 단점 또한 매우 명확하다. 하나의 예시로 사용처가 매우 제한되며, 필요에 따라 어플리케이션 레벨에서 추가적인 작업이 필요할 가능성도 있다. (사실 매우 많...)
+
+### Deep Dive!
+
+[AWS DynamoDB](https://aws.amazon.com/dynamodb/)는 일단 MSA와 굉장히 많은 것이 닮아있다.
+전형적인 NoSQL database의 특징들을 그대로 가지고 있으면서, 추가로 infra의 관리나 tuning이 전혀 필요없는 serverless한 특징, 
+그리고 별도의 추가 설정 없이 자동으로 scaling이 된다는 점은 분명한 장점이다. (다만, 자동으로 scaling이 되는 것에는 몇 가지 조절이 필요하다. 이에 대해서는 후술.)
+
+가장 큰 장점으로 만약에 MSA를 하고 있거나, 적용할 계획이 있다면 적절한 조건 하에서 DynamoDB는 Microservice와 매우 잘 어울리는 데이터베이스가 될 것이다.
+MSA에서는 하나의 서비스가 하나의 데이터베이스 인스턴스를 가져야 한다. 대부분의 데이터베이스로 비용을 절감하기 위해서는 적절한 수준의 instance를 선택하는 데에 리소스를 소모해야한다.
+(db.t3.small이면 충분한데 db.medium을 쓰면 성능이 남아돌게 된다.) 그리고 이를 분석하는 데에는 대개 시간이 걸린다.
+
+하지만 DynamoDB를 사용한다면 단순히 해당 서비스에서 사용할 table만 만들어주고 그냥 쓰면 된다!! 뭐 그냥 신경쓸 게 정말로 없긴 하다..
+
+자, 여기까지 읽으면 완전 멋지고 환상적인 데이터베이스임에 틀림이 없다. 하지만 우리는 세상에 그런 것 따윈 없음을 잘 알고 있다.
+
+<BlogImage src="posts/introduction-to-dynamodb/nothing.jpg" alt="그딴 거 없다" size="half" caption="잘 알고 있겠지..."></BlogImage>
+
+### Cons
+
+제대로 알고 사용하지 않으면 매우 큰 낭패를 볼 수 있다. 데이터베이스가 통째로 바뀌는 상황을 이미 여러 번 목격하고 경험했으며, 뼈저리게 느꼈고, 아마 이 글을 작성하는 주된 이유일 것이다.
+
+가장 큰 단점으로, 복잡한 쿼리가 안된다. 아니, 중간 정도의 복잡도를 가진 쿼리가 안된다고 하자.. 위에서 redis와 비슷한 KeyValue store라고 했는데, 쿼리 방식도 redis와 비슷하다. (살짝 더 낫다...)
+이 부분은 설명보다 예시로 설명하는 것이 빠르겠다. 
+
+<br />
+
+##### Collection: user
+
+|   | id                               | username    | email_address         | phone_number  |
+|---|----------------------------------|-------------|-----------------------|---------------|
+| 1 | 64a8c01344004404a7b881a47f5e83d2 | first_user  | first_user@gmail.com  | +821011111111 |
+| 2 | 449214334435468abdb172ad3345ee45 | second_user | second_user@gmail.com | +821011111112 |
+| 3 | 19d25527e7e64775b4819d723e5f9612 | third_user  | third_user@gmail.com  | +821011111113 |
+
+조건:
+- id, email_address, phone_number -> unique
+- id, email_address, phone_number -> indexed (검색이 빈번하게 일어남)
+
+기본적으로 id를 PK로 하고, email_address와 phone_number를 INDEX로 만들어서 스키마를 구성할 수 있을 것이다.
+중요한 것은, email_address 또는 phone_number로 검색이 일어나기 때문에 각 칼럼들도 UNIQUE INDEX로 구성해주어야 할 것이다.
+결과적으로 이렇게 구성하면 application에서 해당 스키마의 constraint에 전혀 구애받지 않고 데이터를 사용할 수 있게 된다.
+
+DynamoDB에서는...
+
+조건:
+<ul>
+    <li style={{"color": "red"}}>id, <strike>email_address, phone_number unique</strike> <b>불가능</b></li>
+    <li style={{"color": "#00ff72a6"}}>id, email_address, phone_number indexed (검색이 빈번하게 일어남) <b>가능</b></li>
+</ul>
+
+##### 왜 id, email_address, phone_number 각각이 unique하도록 설정할 수 없나?
+
+일단 DynamoDB는 오직 하나의 key만 uniqueness가 보장이 된다. DynamoDB는 하나의 키로 PK를 구성하는 `단일 키`, 그리고 두 개의 키를 합쳐서 PK를 구성하는 `복합 키` 두 종류의 PK가 존재한다.
+즉 오직 하나의, 또는 두 개의 조합 (combination) 만 uniqueness가 보장될 뿐, 여러 개의 attribute를 unique하게 설정할 수가 없다.
+그리고 엄밀히 말해서 PK로 설정했다고 해도 `PutItem`[^2] 시에 동일한 키가 있다면 오류를 내는 것이 아니라 덮어쓴다. 오류를 내게 하려면 조건을 추가하여 (`ConditionalExpression`) 조건부 저장을 수행해야 한다.
+뭐 어쨌든 그렇게 하면 PK의 경우, 가능은 하다. email_address와 phone_number가 불가능한 건 2번째 조건이 왜 가능한지 설명하고 돌아오겠다.
+
+##### 왜 id, email_address, phone_number 각각으로 검색이 가능하도록 설정 가능한가?
+
+DynamoDB에는 index를 추가할 수 있는 기능이 존재하여, 특정 attribute를 기반으로 item들을 `index` 해놓을 수 있다. index에는 `local secondary index`와 `global secondary index` 두 가지가 있다.
+
+- Local secondary index: 테이블 PK의 hash key는 같고 range key[^3]가 다른 것, 즉 복합 키 방식의 테이블에만 생성할 수 있고, **테이블 생성 시 추가해야 한다.**
+- Global secondary index: PK와 상관없이 특정 attribute를 index로 만들 수 있다. **테이블 생성 시 추가할 필요 없고 언제라도 추가 및 삭제 할 수 있다.**
+
+이 경우에는 간단하게 Global secondary index로 email_address와 phone_number를 추가한다면 해당 attribute들로 item을 가져올 수 있다.
+
+**하지만!!!** 단 하나만 가져오는 `GetItem`[^4] 은 불가능하며, 다수의 아이템을 가져오는 `query`[^5] operation을 사용해야 한다.
+바로 이 점이 email_address와 phone_number가 uniqueness가 보장이 안되는 이유다. PK야 어차피 하나 (혹은 복합) 만 설정 가능한 건 어떤 DB나 마찬가지이니, 
+id를 설정하는 것이 당연하지만, index가 지원이 됨에도 불구하고 index된 attribute들은 unique가 보장이 안되는, 즉 **index는 가능하나 unique index를 만들 수는 없는** DB이다.
+바로 이 특성 때문에 첫 번째 조건에서 email_address과 phone_number를 unique하게 설정할 수 없다.
+
+그렇게 복잡한 쿼리가 아님에도 어느 정도 어려움이 있는 DB인 것은 확실하다. 
+사실 이 점이 가장 큰 단점이고, 거의 유일한 단점이라고 본다. 이 단점이 굉장히 많은 부분에서 불편을 초래할 수 있기 때문에 신중히 고려가 되어야 할 것이다.
+단순히 로그만 저장할 것이 아닌, 대부분의 영속적인(persistent) data store가 필요할 경우 고려 대상이 되어야 한다.
+
+### 돌아와서...
+
+DynamoDB는 적절한 곳에 사용하면 틀림없이 매우 많은 리소스를 절약해줄 수 있을 것이라고 자신있게 이야기할 수 있다. AWS에서 제공하는 fully managed database라는 이점이 너무 크기 때문에 그렇다.
+다만 그 `적재적소`라는 것을 판단하는데 가장 중요한 것은 위에 상기한 단점인 복잡한 쿼리의 불가능이다.
+사실, 이 단점은 DynamoDB의 단점이라기보다 KeyValue store의 단점이라고 보는 것이 맞을 것이다. 만약에 DynamoDB를 계속 사용하기로 결정했다면 꼭 아래의 읽을 거리를 참고하기를 바라며,
+혹시 당신이 Python + asyncio 를 사용하면서 DynamoDB를 사용해야 한다면, [InPynamoDB](https://github.com/sunghyun-lee/inpynamodb)를 사용해보기를 권하는 바이다.
+
+### 읽을 거리:
+- https://www.dynamodbguide.com/
+- https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html
+
+    
+[^1]: DynamoDB에서 사용되는 파티셔닝 키, 해당 키만으로 PK를 생성하거나, range key(sort key)를 조합하여 복합 PK를 생성할 수 있다.
+[^2]: DynamoDB에서 데이터를 저장할 때 사용하는 operation
+[^3]: 같은 hash key의 데이터들을 정렬하는 키. `같은 파티셔닝 키` 라는 말에서 알 수 있듯, PK를 정할 때 range key와 함께 복합 PK로 만들면, hash key는 중복이 가능하다. 단, hash key와 range key의 조합인 PK는 중복되면 안된다.
+[^4]: PK를 이용하여 데이터를 가져오고, 데이터가 존재하지 않을 경우 400 status code 및 오류를 반환한다.
+[^5]: index의 hash key만을 이용하여 데이터를 가져오고, 데이터가 존재하지 않을 경우에도 성공 status code 및 빈 데이터를 반환한다. 그리고 리턴 타입은 기본적으로 array이다.
