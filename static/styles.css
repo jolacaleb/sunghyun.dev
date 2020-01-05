@@ -1,0 +1,7 @@
+div.SocialList {
+    text-align: end;
+}
+
+div.SocialList > a {
+    margin-right: 8px;
+}
