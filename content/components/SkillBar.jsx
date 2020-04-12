@@ -16,7 +16,7 @@ function SkillBar(props) {
     const BorderLinearProgress = withStyles({
         root: {
           height: 10,
-          backgroundColor: lighten(props.color, 0.5),
+          backgroundColor: lighten(props.color, 0.8),
         },
         bar: {
           borderRadius: 20,
@@ -26,13 +26,14 @@ function SkillBar(props) {
   return (
     <Tooltip title={props.caption} placement="right">
         <div style={{'width': '50%', 'margin-bottom': '16px'}}>
-            <span>{props.name}</span>
-                <BorderLinearProgress 
-                    className={classes.margin}
-                    variant="determinate" 
-                    color="primary"
-                    value={props.value}
-                />
+            <span><b>{props.name}</b></span>
+            <BorderLinearProgress 
+                className={classes.margin}
+                variant="determinate" 
+                color="primary"
+                value={props.value}
+            />
+            <code>{props.value}</code>
         </div>
     </Tooltip>
   );
