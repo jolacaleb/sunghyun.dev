@@ -68,3 +68,6 @@ public
 .vscode
 .DS_Store
 .python-version
+
+# Local Netlify folder
+.netlify
