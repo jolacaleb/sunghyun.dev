@@ -5,3 +5,7 @@ div.SocialList {
 div.SocialList > a {
     margin-right: 8px;
 }
+
+div.centeredChildren {
+    text-align: center;
+}
