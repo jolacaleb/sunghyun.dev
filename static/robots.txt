@@ -1,3 +1,3 @@
-User-agent: *
-
-sitemap: https://sunghyun.dev/sitemap.xml
+version https://git-lfs.github.com/spec/v1
+oid sha256:9d0b2f7e32dc3cd8e7021d275e7ebe3233c0f44ae3010f5bd55f5ca693e74b78
+size 56
