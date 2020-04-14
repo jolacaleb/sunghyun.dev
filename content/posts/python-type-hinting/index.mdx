@@ -1,0 +1,225 @@
+---
+title: Python Type Checking
+author: Sunghyun Lee
+date: 2019-10-31 02:53:00
+slug: "/python-type-checking"
+tags:
+  - python
+---
+
+import BlogImage from '../../components/BlogImage';
+
+> 이 포스팅은 MyMusicTaste 2019년 10월 Engineering Day 발표한 내용을 토대로 한 포스팅입니다.
+
+사내 엔지니어링 데이 발표했던 주제로 포스트를 작성해보려고 한다. 주제는 파이썬에서의 타입 체킹이다.
+파이썬은 `??? Typing` 언어이다. 무슨 Typing일까? 먼저 프로그래밍 언어에서 사용되는 타입 시스템에 대해 짚고 넘어가보자.
+
+### Type System
+
+흔히 사용되는 타입 시스템에는 3가지가 있다.
+
+##### Dynamic Typing
+
+변수의 타입을 개발자가 직접 정의내리지 않고, 인터프리터가 변수의 타입을 추측/추론하여 타입을 정의하는 방식이다.
+아래의 파이썬 코드를 보자.
+
+```python
+class Person:
+    def __init__(self, name):
+        self.name = name
+
+person = "Harry potter"
+type(person)
+# <class 'str'>
+
+person = Person("Harry potter")
+type(person)
+# <class '__main__.Person'>
+```
+
+똑같은 변수 `person`에 대해 타입을 따로 지정해주지 않았는데 타입이 적절한 타입으로 자동으로 변경되는 것을 알 수 있다.
+
+그리고 파이썬에서의 Dynamic typing 방식을 공부하다보면 Duck typing을 반드시 접하게 되는데, 
+간단하게 정의하자면 Duck typing은 `오리처럼 걷고, 오리처럼 꽥꽥거리면, 그것은 틀림없이 오리다.` 에서 유래된 타이핑 시스템이다.
+
+> 객체가 어떤 타입으로 정의내려지는 것보다, 어떻게 사용되는지가 더 중요하다.
+
+##### Static Typing
+
+위의 Dynamic Typing과 달리, 변수의 타입을 개발자가 직접 정의내려야 하는 타입 시스템이다. 역시 아래의 예시를 보자.
+
+```c
+int main()
+{
+    typedef struct {
+        char* name;
+        int age;
+    } Person;
+
+    char* person;
+    person = "Harry Potter";
+    printf("%s", person);
+
+    Person person = {"Harry Potter", 15};
+    printf("Name: %s, Age: %d", person.name, person.age);
+
+    return 0;
+}
+```
+
+위의 C 코드를 컴파일하면 아래와 같은 오류가 출력된다.
+
+<BlogImage 
+    src="posts/python-type-hinting/compile_error.png"
+    alt="Compile error for different typing on same variable"
+    caption="Compile Error"
+    size="full"
+></BlogImage>
+
+`program.c:15:12`에 난 오류는 `person`이라는 변수가 다른 타입으로 재정의되었기 때문에 오류가 발생했다는 것이다.
+변수를 재정의하는 것이 strict하게 금지되어 있을 뿐만 아니라 `16`번째 라인의 member refernce를 `char*` 의 타입에서 사용할 수 없다는 오류가 나온다.
+즉, Dynamic typing과 다르게 인터프리터나 컴파일러가 변수의 타입을 지정해주거나 추론하지 않는 시스템을 의미한다.
+그리고 사실 `15`번째 라인의 오류는 Static typing 때문이 아닌 Strong typing 때문일 확률이 좀 더 높으며, string typing과 weak typing에 대해서는 [여기](https://en.wikipedia.org/wiki/Strong_and_weak_typing)를 참고해보아도 좋다.
+
+### Type hint?
+
+파이썬은 우리가 잘 알다시피, Dynamic typing system의 특성을 가진 언어이다.
+하지만 [PEP-484](https://www.python.org/dev/peps/pep-0484/)의 등장으로 파이썬에서도 static type checking을 할 수 있게 되었다.
+단! 자바나 다른 static typing 언어들처럼 타입을 **강제하지 않는다!**
+
+파이썬에서 타입 힌트를 사용하기 위해서는 
+
+1. 파이썬 버전 3.5 이상이어야 한다.
+2. mypy 라는 패키지를 이용한다.
+
+물론 IDE를 이용하면 경고를 뜨게 할 수 있지만, 모두가 IDE를 사용하진 않기 때문에 `mypy`를 이용해서 하는 법을 서술할 것이다.
+코드를 `mypy` 대응하게 고치면 IDE에서 더 정확하게 타입 추론 및 타이핑을 해주기 때문에 IDE를 쓸 때에도 타입 체크를 하고 싶다면 이와 같이 타이핑 해야 한다.
+
+```python
+# 타입에 대한 정보가 제공되지 않은 경우
+def greeting(name):
+    return "Hello " + name
+
+
+# 타입에 대한 정보를 넣은 코드
+def greeting_with_type_hints(name: str) -> str:
+    return "Hello " + name
+```
+
+기본적인 코드이다. 첫번째 함수는 일반적인 작성법이고, 두번째 함수같이 작성하면 `name` 인자가 스트링 타입이라는 `힌트`를 남기게 된다.
+해당 함수를 호출하되, 스트링이 아닌 int로 호출하는 코드를 작성해보겠다.
+
+<BlogImage 
+    src="posts/python-type-hinting/greeting_code.png" 
+    alt="Basic type hinting example" 
+    size="full" 
+></BlogImage>
+
+첫번째 함수를 호출하는 부분은 스트링이 아닌 정수를 넣어도 경고가 출력되지 않지만, 두번째 함수를 호출하는 부분에서는 잘못된 인자에 대해 경고가 표시된다.
+그러므로 타입 힌트가 되어 있는 코드는 좀 더 쉽게 개발을 할 수 있는 장점이 있다.
+
+여러 가지 예시를 보자.
+
+```python
+def greeting(name: str) -> str:
+    # 인자로 `name` 이라는 str을 받고, str을 리턴하는 함수
+    return "Hello " + name
+
+def add(a: int, b: int) -> int:
+    # 인자로 `a`와 `b`라는 int를 받고, int를 리턴하는 함수
+    return a + b
+
+def parent_func() # -> ???:
+    # function을 리턴하는 함수
+    def child_func():
+        print("Hello World!")
+    
+    return child_func
+```
+
+1, 2번째 예시는 직관적으로 이해할 수 있지만, 3번째 예시는 어떻게 표기해야 하는지 잘 모르겠다면, `Typing` module을 소개할 차례이다.
+
+### Typing module
+
+https://docs.python.org/3/library/typing.html
+
+링크의 서론 부분만 슬쩍 훑어봐도 어떤 모듈인지 알 수 있을 것이다. 이 모듈은 기본적으로 제공하는 타입 힌트부터, 원시 데이터 타입이 아닌 데이터 타입까지 타입 힌트 적용이 가능하게 만들어준다.
+길어지기 전에 위의 3번째 함수를 `Typing` 모듈을 사용해서 변환해보자.
+
+``` python
+from typing import Callable
+
+def parent_func() -> Callable[..., None]:
+    def child_func():
+        print("Hello World!")
+
+    return child_func
+```
+
+위와 같이 사용하면 완벽하다. 자 그런데 한가지만 더 짚고 넘어가자면 `Callable`로 선언할 때 `[]` 기호가 있다.
+이 기호는 [{list of type of argument}, {return type}] 으로써, 브라켓의 첫번째에는 불려지는 함수의 인자들에 대한 타입 힌팅이, 두번째에는 반환되는 데이터의 타입 힌팅이 가능하다.
+위와 같은 경우는 `인자에 대한 타입 힌트는 생략, 리턴 타입은 None이다`라고 힌팅하는 방법이다.
+생략을 할 때는 위와 같이 `literal ellipsis ...`을 사용해주자.
+
+### 코드가 더러워진다!
+
+하지만 이렇게 프로그램의 메인 로직이 담겨있는 코드에 타입 힌트를 함께 하면 코드가 더러워질 위험이 있다!
+
+<BlogImage 
+    src="posts/python-type-hinting/dirty.png" 
+    alt="Mess with type hinting" 
+    size="full"
+    caption="InPynamoDB의 코드 중 일부를 바꿔보았다 ... 가독성이 좋은 코드인가 ?"
+></BlogImage>
+
+콜론(:) 이후로 떼고 보면 되긴 하지만, 그러면 또 읽지도 않을 코드가 들어가 있게 되는 셈이 된다.
+그러므로 타입 힌트와 코드베이스를 분리하고 싶다!
+
+### stub files
+
+`.pyi` 확장자를 가진 stub file을 생성함으로써 해결할 수 있다.
+stub file을 생성하면 타입 힌트는 `.pyi` 확장자를 가진 파일에서 해결되고, 코드베이스는 전혀 손대지 않고 타입 힌팅만 할 수 있는 장점이 있다.
+
+일단 stub file을 생성하는 것을 단계별로 진행해보면,
+
+``` bash
+# on the project root
+$ pip install mypy
+$ stubgen {path 명시 가능}
+
+Created out/{project_name}/{created_file}
+...
+
+```
+
+으로 스텁 파일이 생성된다. 타입 힌팅을 전혀 하지 않은 코드라면 모든 인자와 리턴 타입이 `Any` 또는 `...` 등과 같이 타입 힌트가 존재하지 않는 것과 동일한 타입으로 힌팅이 되어 있는 것을 알 수 있을 것이다.
+이제 간단하게 해당 스텁 파일만을 이용하여 typing을 적용하면 된다! (간단하쥬?)
+
+<BlogImage 
+    src="posts/python-type-hinting/new_stub_file.png" 
+    alt="Working with stub file" 
+    size="full"
+    caption="결론적으로 typing workspace는 위와 같이 구성된다."
+></BlogImage>
+
+### more!
+
+파이썬에서 Typing을 사용하기 위한 type hint의 방법은 위의까지가 전부다. 다만, 좀 더 strict하게 하기 위해서 code linting 같이 static type checking을 하고 싶을 경우가 있다.
+github PR을 날리면 test를 돌리면서 동시에 type checking도 동시에 하고 싶다거나 ... 그런 경우에 `mypy`를 사용하면 된다.
+위에서 `stubgen`을 설치하기 위해 `mypy`를 설치했던 것을 기억하고 있을 것이다.
+
+`mypy`를 이용해서 Static type checking을 할 때, 꼭 `.pyi` 파일을 이용하지 않아도 된다!
+`mypy`는 기본적인 static typing 타입 체크부터 주석으로 된 타입 힌트까지 전부 감지하여 타입 힌트가 제대로 되어 있는지 체크한다.
+그러므로 github hook 같은 곳에 `mypy`로 테스트 하는 커맨드만 넣어주면 `mypy`가 해당 소스 파일이 제대로 타입 힌트가 되었는지 체크한다.
+
+사용법은 매우 간단하다.
+
+```bash
+$ mypy {검사할 파일}
+```
+
+해당 명령어를 통해 검사할 파일이 제대로 typing 되었는지 검사할 수 있으며, 
+`mypy.ini` 파일을 통해 설정도 가능하다. - 예를 들어, `Any` 와 같은 타입 힌트의 사용을 확인하면 오류를 출력하게 한다거나 하는 것도 얼마나 strict하게 하고 싶은지에 따라 달라질 수 있다.
+
+> 해당 발표 슬라이드는 아래 URL에 첨부해두었다. <br />
+> https://www.slideshare.net/secret/BK98D4e6ImbLu4
