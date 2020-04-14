@@ -4,13 +4,13 @@ require(`dotenv`).config({
 
 module.exports = {
   siteMetadata: {
-    siteTitle: `ppudolph`,
-    siteTitleAlt: `devblog by ppudolph<sunghyun.lee>`,
-    siteHeadline: `blog @ppudolph`,
+    siteTitle: `sunghyun.lee`,
+    siteTitleAlt: `sunghyun.dev`,
+    siteHeadline: `blog @sunghyun`,
     siteUrl: `https://sunghyun.dev`,
     siteDescription: `Personal website for sunghyun.lee, web developer`,
     siteLanguage: `kr`,
-    author: `@ppudolph`,
+    author: `@sunghyun-lee`,
     navigation: [
       {
         title: `Blog`,
@@ -28,7 +28,7 @@ module.exports = {
       },
       {
         name: `github`,
-        url: `https://www.github.com/ppudolph`
+        url: `https://www.github.com/sunghyun-lee`
       }
     ],
   },
@@ -54,7 +54,7 @@ module.exports = {
           },
           {
             name: `github`,
-            url: `https://www.github.com/ppudolph`
+            url: `https://www.github.com/sunghyun-lee`
           }
         ],
       },
@@ -71,7 +71,7 @@ module.exports = {
       options: {
         name: `sunghyun.dev`,
         short_name: `sunghyun.dev`,
-        description: `Personal website for ppudol, web developer`,
+        description: `Personal website for sunghyun-lee, web developer`,
         start_url: `/`,
         background_color: `#fff`,
         theme_color: `#6B46C1`,
