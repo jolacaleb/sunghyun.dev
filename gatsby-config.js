@@ -4,7 +4,7 @@ require(`dotenv`).config({
 
 module.exports = {
   siteMetadata: {
-    siteTitle: `sunghyun.lee`,
+    siteTitle: `sunghyun.dev`,
     siteTitleAlt: `sunghyun.dev`,
     siteHeadline: `blog @sunghyun`,
     siteUrl: `https://sunghyun.dev`,
