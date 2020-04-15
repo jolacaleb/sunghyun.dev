@@ -1,0 +1,229 @@
+---
+title: RDBMS vs MongoDB vs Cassandra
+author: Sunghyun Lee
+date: 2018-11-26 23:00:00
+slug: "/rdbms-vs-mongodb-vs-cassandra"
+tags:
+  - MSA
+  - database
+---
+
+import BlogImage from '../../components/BlogImage';
+
+
+### Introduction
+
+현재 일하고 있는 마이뮤직테이스트에서 새로운 데이터베이스를 도입할지 결정하고자 하여 진행한 리서치이다.
+일단 필자가 NoSQL의 big fan이기도 하고, 현재 회사에서 MSA를 도입하였는데 데이터베이스는 그렇게 다양하게 사용하고 있지 못한 것 같아서, 
+새롭게 도입하기 위해 두 개의 데이터베이스를 비교하여 적용할 수 있는지 논의해보고자 세션을 진행하였다.
+3가지 데이터베이스, RDBMS, MongoDB, 그리고 Cassandra를 비교했는데 RDBMS는 MySQL을 베이스로 하였다. 
+RDBMS는 사용하고 있는 데이터베이스 였고, MongoDB와 Cassandra를 비교하기 위해 기준 데이터베이스로 모든 개발자가 어느 정도 지식을 가지고 있는 MySQL을 비교 대상에 포함시켰다.
+
+발표를 하고 간단하게 정리하기 위해 포스팅을 작성한다.
+
+### 왜 새로운 database의 도입이 필요한가?
+
+MSA에서는 서비스 당 하나의 데이터베이스 instance의 규칙을 지키는 것이 매우 중요하다. 
+MSA의 특징 중 하나가 서비스 하나에서 발생한 문제가 다른 서비스에 영향을 미치지 않아야 하는 것이다. 이를 성취하기 위해 Circuit breaker등 다양한 방법을 도입하기도 한다.
+그런데, 만약에 database, table을 적절히 서비스별로 나누었다 하더라도 instance는 공유한다면? 그리고 그 instance에 문제가 있다면? 그 instance를 사용하는 모든 서비스가 작동하지 않을 것이다.
+아래의 움짤을 보자.
+
+<BlogImage 
+    src="posts/rdbms-vs-mongodb-vs-cassandra/one-fail-all-fail.gif" 
+    alt="One instance failure propagates to several services"
+    size="half"
+    caption="왼쪽이 DB Instance를 공유하는 서비스이고, 오른쪽이 DB Instance를 따로 가지는 서비스이다."
+/>
+
+왼쪽의 상황처럼 하나의 DB instance에서 발생한 오류가 여러 개의 서비스에 문제를 야기하지만, 오른쪽의 경우에는 instnace가 각 서비스마다 분리되어 있기 때문에 한 instance의 오류는 해당 서비스 외 다른 서비스에 오류를 유발하지 않는다.
+MSA를 성공적으로 적용하고 이제 하나하나씩 backlog 들을 해결하는 과정에서 논의가 필요할 시점이 된 것이다.
+
+또한, 최고의 Scalability를 구현하기 위해서, DB의 replication[^1] 및 partitioning[^2]이 필수적이다. 
+현실적으로 인원의 제약, 비용의 제약 등이 있기 때문에 가장 쉽고 가장 빠르게, 안정적으로 사용할 수 있는 데이터베이스를 찾아야 했다.
+
+<BlogImage 
+    src="posts/rdbms-vs-mongodb-vs-cassandra/scale-cube.png" 
+    alt="Scale cube with MSA"
+    size="full"
+    caption="3차원으로 표현한 서버 scaling 그래프"
+/>
+
+위의 그림처럼 마이크로서비스의 스케일링은 3가지를 이용해서 가능한데,
+- 기능의 분리: 마이크로서비스로 기능을 분리하여 스케일링, 즉 하나의 서비스가 하는 일을 줄임으로써 스케일링 한다는 개념이다.
+- 수평 확장: 한 마디로 서비스를 여러 개 띄워서 스케일링 하는 개념이다.
+- 데이터 파티셔닝: 데이터를 여러 소스에 분산하여 저장하는 방식을 사용하는 개념이다.
+
+기능의 분리, 수평 확장의 경우에는 데이터베이스와 상관없이 해결할 수 있지만, 데이터 파티셔닝은 데이터베이스에 따라 비용이 천차만별이기 때문에 이에 대해서도 조사를 해야 했다.
+
+**문제를 방지하기 위한 데이터베이스**
+
+**데이터 파티셔닝 및 스케일링이 쉬운 데이터베이스**
+
+를 찾기 위한 리서치이다. 
+
+### 문제 정의
+
+우리는 문제가 어떤 것인지 이야기해보았고, 업무 상 사용하는 용어도 많이 나왔기 때문에 굉장히 간추려서 정리하자면 다음과 같다.
+현재 사용하고 있는 유일한 NoSQL 데이터베이스인 DynamoDB로 하기 불편한 것들이 어느 정도 반영되었다고 생각한다.
+
+|   | 필요한 것                                 | 어떻게 해결                                                                              |
+|---|-------------------------------------------|------------------------------------------------------------------------------------------|
+| 1 | 복잡한 쿼리로 데이터를 가져오기 힘들다.   | 다양한 인덱스를 제공                                                                     |
+| 2 | unique index가 지원되었으면 좋겠다.       | 지금처럼 application level에서 핸들링하거나, unique index를 지원하는 데이터베이스를 찾기 |
+| 3 | 매우 많은 데이터를 저장할 수 있어야 한다. | scale up/out 이 쉬워야 한다.                                                             |
+
+1, 2번은 데이터베이스를 잘 선택하면 해결되는 문제이나 3번의 경우에는 해결 방안이 `fully managed` 혹은 `partially managed` 였다. 적어도 우리가 instance를 직접 띄워서
+직접 샤딩하고 인스턴스 늘리고 이런 짓은 하지말자 라는 것이 공통된 의견이었고, 당연한 의견이었다.
+
+그래서 결국 3가지의 후보가 오르게 된다.
+
+|                    | 대략적인 가격                                                      | 무료 버전 존재            | 가격 변화 요인                                                                                                    |
+|--------------------|--------------------------------------------------------------------|---------------------------|-------------------------------------------------------------------------------------------------------------------|
+| AWS Aurora, MySQL  | $ 15,000 db.r4.xlarge 1 master and 2 slave 기준                    | MySQL                     | - 어떤 type의 instance (db.r5.xlarge 등 ...) 를 사용할 것인지 <br />- 얼마나 많은 master/slave instance를 사용할 것인지 |
+| MongoDB Atlas      | $52,210 ~ $68,000 M40 - low CPU 3 RS, 1 read-only RS, 1 shard 기준 | MongoDB Community version | - 어떤 atlas type을 사용할 것인지 <br />- 한 클러스터에 몇 개의 노드로 구성할 것인지                                    |
+| Datastax Cassandra | 아직 모름[^3]                                                      | Apache Cassandra          | 아직 모름[^3]                                                                                                         |
+
+먼저 MongoDB와 MySQL의 퍼포먼스 차이부터 보면,
+
+<BlogImage 
+    src="posts/rdbms-vs-mongodb-vs-cassandra/performance-mysql-mongodb.png" 
+    alt="Performance test between MySQL and MongoDB"
+    size="full"
+    caption="m4.xlarge인스턴스, ubuntu14.4 x64, 1,000,000개의 레코드 사용"
+/>
+
+그렇게 MongoDB가 놀랍게 빠르지는 않다. 여기서 볼 때, MongoDB는 MySQL에 비해 `update`나 `create`에 성능이 좋은 것을 알 수 있다.
+다시 말하면, 데이터 조작과 관련된 operation에서 좀 더 성능이 좋을 수 있을 것이라는 기대를 할 수 있고, 반대로 읽기가 빈번한 서비스에서는 MySQL이 더 나을 수도 있다는 것을 알 수 있다.
+
+<BlogImage 
+    src="posts/rdbms-vs-mongodb-vs-cassandra/performance-mysql-myisam-mongodb.png" 
+    alt="Performance test between MySQL and MongoDB"
+    size="full"
+    caption="출처: https://github.com/reoxey/benchmark"
+/>
+
+MyISAM은 MySQL storage engine중 한 종류로 InnoDB와 여러 가지 기능에서 차이가 있는데 `transaction`을 지원하지 않는다던가, row-lock이 아닌 전체 table-lock을 건다거나 하는 차이가 있다. 
+특히 ACID도 만족하지 않으므로, 주의해서 사용해야 한다.
+
+성능 면에서는 그렇게 큰 차이가 없는 것 같다. 그렇다면 Scaling은 어떨까?
+
+애초에 RDBMS 자체가 싱글 서버에서 운영되는 것을 전제로 설계된 데이터베이스이다 보니, 스케일링, 특히 파티셔닝이 매우 힘들다.
+
+```sql
+SELECT user.*, pn.phone_number, setting.* 
+FROM user  
+OUTER JOIN setting ON setting.signup_at < 2018  
+LEFT JOIN pn ON user.id = pn.user_id AND pn.veriﬁed = 1 
+WHERE user.id > 100000
+```
+
+이렇게 복잡한 쿼리도 가능하게 만들어진 데이터베이스이기 때문에 데이터를 흩어놓는 것보다 순차적으로 저장되어 있는 것이 쉽고, 
+파티셔닝을 하기 위해서 매우 어려운 과정들을 거쳐야 한다. ACID나 관계 등을 지원하는 데 대한 trade-off로도 볼 수 있을 것 같다.
+
+반대로 MongoDB나 Cassandra는 이런 것에서 자유롭다. 다만 ACID 특성을 갖지 못하고, JOIN 등의 operation이 불가능하거나 매우 비효율적이다.
+NoSQL과 같은 분산 데이터베이스에는 CAP 정리라는 것이 있는데, Consistency, Availability, Partition Tolerance 세 가지를 모두 만족하는 데이터베이스 시스템은 없다는 정리이다.[^4]
+
+<BlogImage 
+    src="posts/rdbms-vs-mongodb-vs-cassandra/cap-theorem.png" 
+    alt="CAP Theorem"
+    size="full"
+    caption="CAP 정리. 각각을 만족하는 Database도 예시로써 명시되어 있다."
+/>
+
+각각의 의미하는 바는 다음과 같다.
+- 일관성(Consistency): 모든 노드가 같은 순간에 같은 데이터를 볼 수 있다.
+- 가용성(Availability): 모든 요청이 성공 또는 실패 결과를 반환할 수 있다.
+- 분할내성(Partition tolerance): 메시지 전달이 실패하거나 시스템 일부가 망가져도 시스템이 계속 동작할 수 있다.
+
+이 특성들 중 최대 2개까지 만족할 수 있으며, MongoDB와 Cassandra가 어디에 위치해 있는지 찾아보면 각각의 데이터베이스가 기본적으로 어떠한 특성을 지녔는지 쉽게 파악할 수 있다.
+
+### MongoDB
+
+#### 장점
+- 강력한 인덱싱 기능의 지원. 관계 및 JOIN이 들어간 복잡한 쿼리라도 어느 정도 수행할 수 있다. (`aggregate` 등의 기능 사용 가능, 하지만 매우 성능이 좋지 않은 것으로 악평이 높다..)
+- 레퍼런스를 지원. 최소한의 관계, 즉 User와 Email 테이블이 분리되어 있는 상태에서 User.email을 접근했을 때 `Email` table에서 값을 가져와 넣는 식의 동작이 가능하다. 즉 간단한 Foreign Key 지원이라고 생각하면 편하다.
+- Impedance mismatch (객체-관계 불일치)[^5]를 신경쓰지 않아도 된다.  
+- [Atlas](https://www.mongodb.com/cloud/atlas)를 이용하여 쉬운 관리
+- 버전 4.0부터 트랜잭션 지원
+- 문서화가 상세하게 잘 되어 있고, NoSQL 진영 중에서는 제일 커뮤니티가 성숙함.
+
+#### 단점
+- 다른 NoSQL과 비교했을 때 느린 성능
+- Single point of failure가 존재
+- 색인되지 않은 (not-indexed) 데이터에 대한 쿼리가 매우 느림
+- 메모리를 매우, 매우 많이 잡아먹음
+
+MongoDB는 document 방식의 NoSQL 데이터베이스로써, 기본적으로 primary 와 secondary node들로 한 클러스터가 구성된다. 각 노드들은 샤딩될 수 있으며, 예를 들어 1 primary, 2 secondary 노드들로 클러스터가 구성되었고, 각각의 노드들은 몇 개씩의 샤딩으로 나눠질 수 있다.
+만약 primary 노드가 다운된다면, 두 개의 secondary 노드 중에서 한 노드가 primary가 되도록 투표로써 선정된다.
+
+<BlogImage
+    src="posts/rdbms-vs-mongodb-vs-cassandra/mongodb-write-op.gif" 
+    alt="MongoDB write operation"
+    size="full"
+    caption="MongoDB의 write operation"
+/>
+
+Write Concern이라는 옵션은 몇개의 노드에 이 item을 써야 이 데이터가 성공적으로 쓰여졌다고 인정하는지에 대한 옵션이다. w가 2이므로, 2개의 노드에 데이터가 저장되면 성공이다. 하나의 primary, 그리고 하나의 secondary에 쓰여지면 이 operation은 성공한 것으로 본다.
+각 노드마다 2개의 샤드를 가지고 있으므로 적절한 샤드에 데이터를 삽입한다. 예시에서는 2번째 샤드에 삽입하였다.
+
+<BlogImage
+    src="posts/rdbms-vs-mongodb-vs-cassandra/mongodb-read-op.gif" 
+    alt="MongoDB read operation"
+    size="full"
+    caption="MongoDB의 read operation"
+/>
+
+Read concern이라는 옵션은 몇 개의 노드에 해당 item을 가지고 있어야 데이터가 존재한다고 인정하는지에 대한 옵션이다. `majority`를 주었으므로, 2/3에서 이 데이터를 찾을 수 있어야 한다. primary에서 찾았고, 하나의 secondary에서 찾자마자 응답한다.
+
+### Cassandra
+
+#### 장점
+- 성능에 초점을 맞춘 데이터베이스
+- Impedance mismatch (객체-관계 불일치)[^5]를 신경쓰지 않아도 된다.
+- Single point failure가 존재하지 않는다.
+- 위의 CAP 정리 중, CP나 AP 중 선택할 수 있다. 
+
+#### 단점
+- Index 사용에 제한이 있다. 위의 조건 중 하나였던 unique index를 지원하지 않는다.
+- 스키마를 설계하기 어렵다.
+  - Partitioner의 결정이 매우 중요: 첫 replica node를 결정하기 위해 어떤 primary key가 Partitioner가 될지 결정해야 한다.
+  - 각 쿼리에서 read/write consistency level이 잘 정해져야 한다. 최악의 경우 데이터가 유실될수도 있다.
+
+Cassandra는 정말 재미있는 데이터베이스이다. Cassandra는 Ring 형식의 데이터베이스로, CQL (Cassandra Query Language) 라는 SQL과 비슷한 쿼리 언어를 사용한다.
+그리고 DynamoDB와 비슷한 종류의 데이터베이스이기 때문에 key의 종류도 매우 유사하다. 가장 중요한 key는 `primary key`와 `partition key` 인데, `primary key`는 우리가 잘 아는 PK, 즉 각 테이블에서 아이템을 unique하게 결정해주는 속성이다.
+`partition key`는 데이터를 분산하기 위한 기준이 되는 키이다. DynamoDB의 `hash key`와 `primary key`와 키의 용도와 제약이 매우 유사하다.
+
+Cassandra의 Ring 구조 덕분에 Cassandra는 Single point of failure가 없다. - Replica의 설정이 별도로 필요하다. 위의 MongoDB의 경우에는 Primary 노드가 다운되면 secondary 노드들끼리 투표를 해서 새로운 노드를 primary로 선출해야 하기 때문에 이에 시간이 걸린다.
+하지만 Cassandra는 Ring 구조 안에서 모두가 동등한 노드이기 때문에 하나가 다운되면 다른 노드를 콜하는 게 자연스럽다. 각 데이터는 partition key를 통해 데이터가 분산되어 저장되므로, partition key를 안다면 해당 데이터가 어떤 노드에 저장되어 있는지 파악할 수 있다.
+
+single point of failure를 예방하기 위해서 replication 세팅도 필요하다. Cassandra에서 Replication factor가 3개가 되어야 single point of failure가 없어진다. Replication factor가 3이라는 말은,
+예를 들어 노드가 9개로 구성이 되어 있는 경우, 270개의 데이터는 (30 * 3) 개씩 쪼개져서 각 노드에 저장되게 된다. 그래서 결국 9개의 노드가 가진 데이터의 총합이 (270 * 3)이 되므로 3개의 replica set이 완성되는 형태이다. 
+물론 3개의 instance가 각자의 하나의 테이블을 완성하기 위해서 샤드 테이블로 동작하는 것이고.
+
+<BlogImage
+    src="posts/rdbms-vs-mongodb-vs-cassandra/cassandra-write-op.gif" 
+    alt="Cassandra write operation"
+    size="full"
+    caption="Cassandra의 write operation"
+/>
+
+새로운 데이터가 저장될 곳이 Partitioner에 의해 결정된다. 처음 3번 노드에 저장되고, 4번 노드에 복제되었다. Write Consistency 설정이 QUORUM이므로, `((n / 2) + 1)` 개의 노드에 전파되면 성공이라고 간주한다.
+
+<BlogImage
+    src="posts/rdbms-vs-mongodb-vs-cassandra/cassandra-read-op.gif" 
+    alt="Cassandra read operation"
+    size="full"
+    caption="Cassandra의 read operation"
+/>
+
+
+### Conclusion
+
+이렇게 여러 가지 데이터베이스를 비교했지만, 가장 좋은 데이터베이스는 없다. 다만 각자의 차이 및 특징을 잘 보고 우리의 비지니스 로직과 유즈케이스에 잘 맞는 데이터베이스를 골라서 써야 하겠다.
+그리고 또한 여러 가지의 데이터베이스를 MSA에 붙일 수 있도록 해둔다면 추후에도 새로운 비지니스 로직과 feature request가 왔을 때 데이터베이스를 유연하게 결정하여 좀 더 비용이 절감될 것이라고 생각한다.
+
+[^1]: 여러 개의 DB instance에 동일한 데이터를 저장하는 방식, 주로 `Master / slave` 라고도 부른다.
+[^2]: 여러 개의 DB instance에 동일하지 않은 데이터를 저장하는 방식, 즉, 데이터를 instance별로 "나누어서" 저장하는 방식이다. `sharding` 이라고도 하고, 이 방식은 데이터베이스에서 얼마나 지원을 해주느냐에 따라 난이도가 천차만별이다.
+[^3]: Aurora는 pricing이 자세하게 나와있고, MongoDB Atlas의 경우는 contact를 해서 직접 화상 채팅을 나누면서 가격을 알아봤는데 Cassandra는 나중에 약속을 잡고 만나기로 했다.
+[^4]: 이 정리에 대한 증명은 [이곳](https://web.archive.org/web/20080908063921/http://lpd.epfl.ch/sgilbert/pubs/BrewersConjecture-SigAct.pdf)에서 찾아볼 수 있다.
+[^5]: 실제 어플리케이션에서 사용하는 데이터 타입에 비해 데이터베이스에서 사용하는 데이터 타입이 매우 적거나 지원하지 않는 것이 많은 제약 조건. 이를 해결하기 위해 둘 사이의 데이터 교환이 일어날 때에는 무조건 데이터베이스에서 사용하는 데이터 구조를 사용하여 데이터를 변환해야 한다. 즉 중첩된 array라거나, Map등을 어플리케이션에서는 사용할 수 있으나, 데이터베이스에 사용할 수 없으므로 개발자들이 겪는 불편함 등을 의미한다.

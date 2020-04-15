@@ -1,0 +1,262 @@
+---
+title: 파이썬에서의 객체의 복제
+author: Sunghyun Lee
+date: 2019-03-27 19:23:00
+slug: "/copy-in-python"
+tags:
+  - python
+---
+
+> 이 포스팅은 MyMusicTaste Fluent Python 스터디에서 강의한 내용을 간추린 포스팅입니다. Fluent Python chapter 8의 일부 내용입니다.
+
+### Variable
+
+변수란 무언가를 담고 있는 상자가 아니다. 물건에 포스트잇을 붙인 것으로 비유했다.
+
+```python
+a = [1, 2, 3]
+b = a
+a.append(4)
+print(b)  # [1, 2, 3, 4] - a에 4를 추가했는데 b에도 추가되었다.
+
+
+a = "hello"
+b = a
+a += " world!"
+print(b)  # hello - a에 world를 (더했는데) b에는 더해지지 않았다. 
+```
+
+이것만 봐서는 잘 이해가 가지 않는다.
+
+```python
+Chulsoo = {'name': 'Chulsoo Kim', 'occupation': 'Programmer'}
+dj_kim = Chulsoo  # Aliasing 'dj_kim' for 'Chulsoo'
+dj_kim is Chulsoo  # is 연산자를 통해 두 개의 변수의 id가 같음을 확인
+# True
+
+id(dj_kim), id(Chulsoo)
+# (2279484188712, 2279484188712)
+Chulsoo['occupation'] = 'singer'  # Chulsoo의 내용을 바꿈
+dj_kim  # dj_kim의 내용도 바뀜을 확인
+# {'name': 'Chulsoo Kim', 'occupation': 'singer'}
+```
+
+위의 예제에서 Chulsoo와 dj_kim이 단순히 뭔가를 담고 있는 상자였다면, Chulsoo를 바꾸었을 때 dj_kim이 바뀌지 않았을 것이다.
+Chulsoo와 dj_kim은 모두 하나의 어떤 객체에 단순히 `포스트잇`만 붙여서 구분해놓은 것이고, 그렇기 때문에 Chulsoo를 바꾸니 dj_kim까지 바뀐 것이라고 추론할 수 있다.
+
+```python
+Younghee_friend = {'name': 'Chulsoo Kim', 'occupation': 'singer'}
+Younghee_friend == dj_kim  # dict class의 __eq__() 실행, 값만 비교
+True
+Younghee_friend is dj_kim  # 객체에 들어있는 내용은 같으나, id가 다름
+False
+```
+
+위의 예제에서는 Younghee_friend라는 변수를 만들었는데, `aliasing`을 한 게 아니라 값을 입력해주었다. - 새로운 객체를 생성하였다.
+이 경우에 Younghee_friend와 dj_kim은 값만 같을 뿐 id는 다른 `서로 다른 객체` 가 되는 것임을 추론해볼 수 있다.
+
+즉, a가 가리키고 있는 객체가 있고, b = a 라는 식을 사용하여 a를 b에 assign한다면, 이미 만들어진 특정 객체에 `포스트잇` 을 붙이는 행위로 볼 수 있다.
+그러므로 두 포스트잇 (변수) 중 하나를 사용해서 객체의 값을 변경한다면, 두 포스트잇은 같은 객체에 붙어있는 포스트잇이기 때문에 바뀌는 것으로 이해할 수 있을 것이다.
+
+### Identity - 객체의 정체성
+- 생성된 후에는 결코 변경되지 않는다.
+- 메모리 내의 객체의 주소를 정체성이라 한다.
+- 객체의 주민등록번호
+- id() 함수로 이 identity를 정수로 나타낸 값을 받을 수 있다.
+- `is` 연산자로 두 객체의 identity를 비교할 수 있다.
+
+### Identity vs Equality
+
+Identity를 비교하는 예약어로 `is`, Equality를 비교하는 키워드로 `==`이 있다.
+`is`는 위에서 설명했듯이 객체의 identity를 비교하고, overloading 할 수 없는 키워드이다.
+`is`는 사실 두 가지만 알면 되는 것 같은데,
+
+- `a is b`는 `id(a) == id(b)`와 동일하게 동작한다.
+- Singleton과 비교할 때는 `is`를 사용해야 한다.
+
+2번째 특징은 대표적으로 `None` 과 비교할 때를 생각하면 편하다. 파이썬에서 `None`은 미리 저장되어 있는 싱글턴 객체이다.
+우리는 이미 어떤 객체가 `None`인지 아닌지 판별하기 위해 `a is None` 혹은 `a is not None`등을 계속 사용해왔다.
+
+이것에 대해 튜플을 바꾸는 (!) 예제로 한번 알아보자.
+
+```python
+# 두 개의 변수 - 값이 같은 튜플을 가지고 있는 - 선언
+t1 = (1, 2, [30, 40])  
+t2 = (1, 2, [30, 40])
+
+print(t1 == t2)
+# True - 두 변수가 가진 '값'은 같음
+
+print(id(t1[-1]))
+# 2956002700616 - t1의 마지막에 있는 값 `[30, 40]` 의 아이디
+
+t1[-1].append(99)
+# t1의 마지막에 있는 값에 99를 추가함
+
+print(t1)
+# (1, 2, [30, 40, 99]) - 이해가 안간다면 위를 다시 훑어보자
+print(id(t1[-1]))
+# 2956002700616 - 값은 변했지만 레퍼런스는 변하지 않았다.
+
+print(t1 == t2)
+# False (!)
+```
+
+먼저 우리는 튜플은 immutable한 성질을 가진 데이터 타입이기 때문에 튜플 안의 값은 불변한다고 알고 있다.
+그런데, 위의 코드를 실행해보면 t1은 튜플인데 튜플 안의 데이터가 변한다! 어떻게 된 것일까?
+불변성 (immutablity)은 튜플같은 데이터의 데이터 구조체의 물리적인 내용만이 불변한다는 것이다. 사실은 튜플이 변한 것은 아니다. 포스트잇이 가리키고 있던 객체의 값이 변한 것 뿐이다.
+
+중요한 것은 튜플의 값이 바뀐 것처럼 보이기만 하는 것이 아니라 실제로 `== operator` (`__eq__()`) 의 반환값에도 영향을 미친다는 사실이다. 예상치 못한 pitfall이 될 수도 있으니 주의하자.
+
+### Copy
+
+#### Shallow Copy
+위에서 살펴본 바와 같이 동질성, 정체성 간의 차이는 객체를 "복사" 할 때 더 큰 영향을 미친다.
+논리적으로 복사 (라고 표현하자) 를 수행하면 "id가 다른" "같은 객체" 를 생성하게 된다.
+
+자 그렇다면 위의 예시 상황에서와 같이 "객체"가 또 다른 "객체"를 포함하고 있을 때, 복사를 수행한다면
+- 내부 객체도 복사해야 하나?
+- 내부 객체는 공유해도 되나?
+
+```python
+l1 = [3, [55, 44], (7, 8, 9)]
+l2 = list(l1)  # l2는 l1의 사본을 생성
+l2
+# [3, [55, 44], (7, 8, 9)]
+l2 == l1  # l2와 l1의 값은 똑같다.
+# True
+l2 is l1  # 하지만 같은 객체라고 볼 수 없다.
+# False
+```
+
+이런 복사 방법을 `Shallow copy` 라고 한다. 아래 pythontutor 사이트를 참고하여 위의 코드가 어떻게 동작하는지 눈으로 확인해볼 수 있다.
+
+https://goo.gl/9FFLjY
+
+아래의 코드를 보고 `print`가 출력할 구문을 한번 예상해보자.
+
+```python
+l1 = [3, [66, 55, 44], (7, 8, 9)]
+l2 = list(l1)
+l1.append(100)
+l1[1].remove(55)
+
+print('l1:', l1)
+print('l2:', l2)
+
+l2[1] += [33, 22]
+l2[2] += (10, 11)
+
+print('l1:', l1)
+print('l2:', l2)
+```
+
+예상을 했다면 아래의 주석을 보고 다시 한 번 생각해보자.
+
+```python
+l1 = [3, [66, 55, 44], (7, 8, 9)]
+l2 = list(l1)  # l2는 l1의 사본을 생성한다.
+l1.append(100)  # l1에 100을 추가한다. l2에 영향을 주지 않는다.
+l1[1].remove(55)  # 리스트인 l1[1]에서 55를 제거한다. l2에 영향을 미친다. 
+# l2[1]이 l1[1]과 동일한 리스트를 참조하고 있음.
+
+print('l1:', l1)  
+print('l2:', l2)  
+
+l2[1] += [33, 22]  # 리스트인 l2[1]에 [33, 22]를 더한다. l1에 영향을 미친다.
+#  l1[1]은 l2[1]과 동일한 리스트를 참조하고 있음.
+l2[2] += (10, 11)  # 튜플인 l2[2]에 (10, 11)을 더한다. l1에 영향을 주지 않는다.
+# l2[2]는 가변 객체가 아니므로 새로운 튜플 객체가 만들어진다. 
+# 그러므로 l1과 l2에 있는 튜플은 이제 동일 객체가 아니다.
+
+print('l1:', l1)
+print('l2:', l2)
+```
+
+위의 코드를 실행하면 결과는 아래와 같다.
+
+```python
+l1: [3, [66, 44], (7, 8, 9), 100]
+l2: [3, [66, 44], (7, 8, 9)]
+l1: [3, [66, 44, 33, 22], (7, 8, 9), 100]
+l2: [3, [66, 44, 33, 22], (7, 8, 9, 10, 11)]
+```
+
+이 예제도 pythontutor 사이트를 준비하여 손쉽게 볼 수 있도록 해봤다.
+> https://goo.gl/Vxw3Dc
+
+
+#### Deep copy
+
+Shallow copy가 메모리도 절약하고 퍼포먼스도 좋지만,
+객체를 공유하지 않는 복사를 해야 할 필요가 있을 때는 deep copy를 사용한다.
+
+먼저 아래의 예제 코드가 있다.
+
+```python
+class Bus:
+	def __init__(self, passengers=None):
+		if passengers is None:
+			self.passengers = []
+		else:
+			self.passengers = list(passengers)
+
+	def pick(self, name):
+		self.passengers.append(name)
+
+	def drop(self, name):
+		self.passengers.remove(name)
+```
+
+위의 코드는 `버스` 객체를 구현한 것이다.
+
+```python
+import copy
+from bus_class import Bus
+
+bus1 = Bus(['Alice', 'Bill', 'Claire', 'David'])
+bus2 = copy.copy(bus1)  # Shallow copy
+bus3 = copy.deepcopy(bus1)  # Deep copy
+
+id(bus1), id(bus2), id(bus3)  # copy와 deepcopy를 이용해서 3개의 버스를 만들고,
+
+bus1.drop('Bill')  # bus1에서 Bill을 내려준다.
+
+bus2.passengers  # bus2에서도 Bill은 사라졌다.
+
+id(bus1.passengers), id(bus2.passengers), id(bus3.passengers)
+# bus1의 승객 리스트와 bus2의 승객 리스트가 공유되고 있기 때문에 생긴 일이다.
+
+bus3.passengers  # 하지만 bus3은 bus1의 deep copy본이기 때문에 객체 자체가 다른 것을 가리키고 있는 것을 알 수 있다.
+```
+
+### 주의할 점
+
+Copy를 사용할 때 주의할 점으로,
+
+`Circular Reference` 이슈가 있다. 
+
+아래의 예제 코드를 보면 어떤 상황인지 빠르게 이해할 수 있을 것이다.
+
+```python
+a = [10, 20]
+b = [a, 30]
+a.append(b)
+a
+# [10, 20, [[...], 30]]
+
+from copy import deepcopy
+c = deepcopy(a)
+c
+# [10, 20, [[...], 30]]
+```
+
+위의 예제에서,
+
+먼저 b가 a를 두번째 줄에서 참조하고 있고, a가 b를 세번째 줄에서 참조하게 되어 순환 참조가 발생한다.
+a가 간접적으로 자기 자신에 대한 참조를 포함하고 있기 때문인데, 이때 이 순환참조된 a를 c로 deepcopy할 경우 이미 복사한 객체에 대한 참조가 deepcopy에 남아있다.
+조금 더 로우하게 들어가면, deep copy 메소드 `__deepcopy__` 인자 중 하나인 `memo` 딕셔너리에 복사된 객체를 넣어두고, loop를 돌면서 하나하나 객체를 확인하면서 저장한다.
+또한 `__deepcopy__`를 재정의하여 너무 깊이 들어갈 수 있는 문제 역시 해결할 수 있을 것이다.
+
+아래의 pythontutor에서 역시 눈으로 확인할 수 있다.
+> https://goo.gl/9WGxFR

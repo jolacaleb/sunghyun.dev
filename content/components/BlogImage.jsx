@@ -19,7 +19,7 @@ function BlogImage(props) {
     return (
         <div style={{"textAlign": "center"}}>
             <img src={props.src} alt={props.alt} style={imgStyle}></img><br />
-            <span style={{"color": "gray", "font-weight": "bold"}}>{props.caption}</span>
+            <span style={{"color": "gray", "fontWeight": "bold"}}>{props.caption}</span>
         </div>
     )
 }
