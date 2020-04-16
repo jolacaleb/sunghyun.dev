@@ -8,6 +8,7 @@ module.exports = {
     siteTitleAlt: `sunghyun.dev`,
     siteHeadline: `blog @sunghyun`,
     siteUrl: `https://sunghyun.dev`,
+    siteImage: '/og_image.jpg',
     siteDescription: `Personal website for sunghyun.lee, web developer`,
     siteLanguage: `kr`,
     author: `@sunghyun-lee`,
