@@ -27,13 +27,13 @@ LocalStack provides an easy-to-use test/mocking framework for developing Cloud a
 간단하게 풀어보자면, AWS 클라우드 자원을 로컬에서 사용할 수 있게 개발된 일종의 프레임워크이다.
 모든 리소스가 지원되는 것은 아니지만, 개발하는데 필요한 거의 모든 리소스는 지원된다. 지원되는 리소스에 대해서는 [이 URL](https://github.com/localstack/localstack#overview)을 참고하자.
 
-이 포스트에서는 간단하게 docker로 localstack을 올려볼 것이다. 그리고, 파이썬 sanic framework를 사용하여 한번 access해 볼 것이다.
+이 포스트에서는 간단하게 docker로 localstack을 올려볼 것이다. 그리고, 파이썬을 이용하여 간단한 스크립트를 작성해봄으로써 실제로 동작하는지 확인해볼 것이다.
 
 ### Requirements
 
 - docker
 - Python 3.6 이상 (sanic을 사용하기 위함)
-- pip
+- boto3
 
 localstack은 0.11.0 버전 이상의 버전으로 설명한다.
 
@@ -84,4 +84,59 @@ docker로 실행할 경우에는 해당 옵션들을 환경 변수에 주입하�
     이에 따른 에러가 발생하는 경우, TMPDIR=/private$TMPDIR 을 추가하거나 다른 디렉토리로 바꿔주도록 한다. 상세 내용은 https://github.com/localstack/localstack#using-docker-compose 에 더 상세히 나와있다."
 >
 </BlogQuotes>
+
+### Implement
+
+이제 실제로 S3에 오브젝트를 만들고, 가져오고, 삭제하는 간단한 스크립트를 구현해봄으로써 localstack이 실제로 동작하는 지 알아볼 것이다.
+
+간단하게 boto3을 이용한 파이썬 스크립트 코드로 S3에 오브젝트를 manipulate하는 클래스를 구현해보았다. [gist link](https://gist.github.com/sunghyun-lee/6e831d014d0805ecd7a29dfbb7e2703a)
+
+위의 스크립트를 아래와 같이 실행하여 간단하게 결과를 확인해볼 수 있다.
+
+```python
+from pprint import pprint
+
+from S3Manipulator import S3Manipulator
+
+if __name__ == "__main__":
+    manipulator = S3Manipulator()
+
+    # upload a file
+    result = manipulator.upload_file('sample_zip.zip')
+
+    print(f'Result on uploading a file: {result}')
+    print('Press enter key to continue... ')
+    input()
+
+    # get a file if it has successfully been uploaded
+    result = manipulator.get_object('sample_zip.zip')
+
+    print(f'Result on getting an object:')
+    pprint(result)
+    print('Press enter key to continue... ')
+    input()
+
+    # delete a file which has been uploaded
+    result = manipulator.delete_object('sample_zip.zip')
+
+    print(f'Result on deleting an object:')
+    print(result)
+    print('Press enter key to continue... ')
+    input()
+
+    # get a file if it has successfully been deleted
+    try:
+        result = manipulator.get_object('sample_zip.zip')
+    except manipulator.client.exceptions.NoSuchKey:
+        print('SUCCESS: The deleted object does not exist on the bucket.')
+    else:
+        raise ValueError('The object is not deleted: The object still exists in the bucket.')
+```
+
+이와 같이 간단하게 S3 오브젝트를 조작해봄으로써 localstack이 제대로 동작하는 지 확인해볼 수 있다.
+
+### Conclusion
+
+간단하게 localstack의 설치부터 매우 간단한 사용법을 작성해보았다. AWS 자원을 자주 사용하는 사람이라면 이해할 수 있겠지만, 로컬에서 AWS 자원을 가지고 정말 편하게 테스팅을 할 수 있는 툴이라는 것을 알 수 있을 것이다.
+이후 이어질 포스트에서는 이를 이용하여 좀 더 고급 리소스를 사용(SNS + SQS를 이용한 message queue 구현)하는 방법에 대해서 포스팅할 생각이다.
 
